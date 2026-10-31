@@ -1,0 +1,6 @@
+{
+  "name": "دوّرني",
+  "description": "تطبيق دوّرني - المنصة الليبية المباشرة لربط الحرفيين المهنيين بالعملاء للوصول السريع إلى أقرب سباك، كهربائي، نجار، ومختلف المهن بدون إعلانات وبنظام تقييم متقدم ورادار جغرافي",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
