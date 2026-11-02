@@ -7,6 +7,7 @@ import androidx.room.Query
 import androidx.room.Update
 import com.example.data.model.AppNotificationEntity
 import com.example.data.model.CraftsmanEntity
+import com.example.data.model.PortfolioItemEntity
 import com.example.data.model.ReviewEntity
 import com.example.data.model.ServiceRequestEntity
 import kotlinx.coroutines.flow.Flow
@@ -80,4 +81,20 @@ interface HirafiDao {
 
     @Query("UPDATE notifications SET isRead = 1")
     suspend fun markAllNotificationsAsRead()
+
+    // Portfolio Items
+    @Query("SELECT * FROM portfolio_items ORDER BY createdAt DESC")
+    fun getAllPortfolioItems(): Flow<List<PortfolioItemEntity>>
+
+    @Query("SELECT * FROM portfolio_items WHERE craftsmanId = :craftsmanId ORDER BY createdAt DESC")
+    fun getPortfolioForCraftsman(craftsmanId: Long): Flow<List<PortfolioItemEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPortfolioItem(item: PortfolioItemEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllPortfolioItems(items: List<PortfolioItemEntity>)
+
+    @Query("DELETE FROM portfolio_items WHERE id = :id")
+    suspend fun deletePortfolioItem(id: Long)
 }

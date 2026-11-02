@@ -67,11 +67,22 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Tune
+import com.example.ui.components.AddPortfolioItemDialog
+import com.example.ui.components.ConversationsListDialog
 import com.example.ui.components.EditCraftsmanProfileDialog
+import com.example.ui.components.FpsDisplayBadge
 import com.example.ui.components.LocationPickerDialog
 import com.example.ui.components.NewRequestDialog
 import com.example.ui.components.NotificationDrawer
+import com.example.ui.components.NotificationPreferencesDialog
 import com.example.ui.components.RatingDialog
+import com.example.ui.screens.ChatScreen
 import com.example.ui.screens.ClientHomeScreen
 import com.example.ui.screens.CraftsmanDashboardScreen
 import com.example.ui.screens.CraftsmanDetailSheet
@@ -83,6 +94,7 @@ import com.example.ui.theme.RedEmergency
 import com.example.ui.viewmodel.AppMode
 import com.example.ui.viewmodel.HirafiViewModel
 import com.example.util.AppLanguage
+import com.example.util.FrameRateHelper
 import com.example.util.Localization
 
 class MainActivity : ComponentActivity() {
@@ -92,6 +104,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Enforce 90 FPS ultra-smooth refresh rate with hardware GPU acceleration
+        FrameRateHelper.applyFrameRate(this, FrameRateHelper.TargetFps.FPS_90)
 
         setContent {
             val language by viewModel.language.collectAsState()
@@ -114,8 +128,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            val isDark by viewModel.isDarkMode.collectAsState()
+            val systemDark = isSystemInDarkTheme()
+            val currentDark = isDark ?: systemDark
+
             CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-                MyApplicationTheme {
+                MyApplicationTheme(darkTheme = currentDark) {
                     MainScreen(
                         viewModel = viewModel,
                         onCall = { phone -> makePhoneCall(phone) },
@@ -195,6 +213,7 @@ fun MainScreen(
     val notifications by viewModel.notifications.collectAsState()
     val selectedCraftsmanItem by viewModel.selectedCraftsmanForDetail.collectAsState()
     val craftsmanReviews by viewModel.craftsmanReviews.collectAsState()
+    val craftsmanPortfolio by viewModel.craftsmanPortfolio.collectAsState()
 
     val isRatingDialogOpen by viewModel.isRatingDialogOpen.collectAsState()
     val ratingTargetCraftsman by viewModel.ratingTargetCraftsman.collectAsState()
@@ -203,6 +222,10 @@ fun MainScreen(
     val requestTargetCraftsman by viewModel.requestTargetCraftsman.collectAsState()
     val currentLocation by viewModel.currentLocation.collectAsState()
 
+    val isNotificationPreferencesOpen by viewModel.isNotificationPreferencesDialogOpen.collectAsState()
+    val notificationPreferences by viewModel.notificationPreferences.collectAsState()
+    val isAddPortfolioOpen by viewModel.isAddPortfolioDialogOpen.collectAsState()
+
     var isNotificationDrawerOpen by remember { mutableStateOf(false) }
     var isLocationPickerOpen by remember { mutableStateOf(false) }
     var isEditProfileDialogOpen by remember { mutableStateOf(false) }
@@ -210,6 +233,11 @@ fun MainScreen(
 
     val detailSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val notifSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val chatSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val activeChatThread by viewModel.activeChatThread.collectAsState()
+    val isConversationsListOpen by viewModel.isConversationsListOpen.collectAsState()
+    val chatThreads by viewModel.chatThreads.collectAsState()
 
     Scaffold(
         modifier = Modifier
@@ -266,8 +294,63 @@ fun MainScreen(
                             }
                         }
 
-                        // Actions: Language Toggle & Notifications Bell
+                        // Actions: Theme Toggle, Preferences, Language, Notifications
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            val isDark by viewModel.isDarkMode.collectAsState()
+                            val isSystemDark = isSystemInDarkTheme()
+                            val isDarkActive = isDark ?: isSystemDark
+
+                            // Live 90 FPS Refresh Rate Indicator Badge
+                            FpsDisplayBadge(language = language)
+
+                            Spacer(modifier = Modifier.width(4.dp))
+
+                            // Direct Firestore Chat Threads Inbox
+                            IconButton(
+                                onClick = { viewModel.isConversationsListOpen.value = true },
+                                modifier = Modifier.testTag("chat_inbox_button")
+                            ) {
+                                BadgedBox(
+                                    badge = {
+                                        if (chatThreads.isNotEmpty()) {
+                                            Badge(containerColor = AmberDark) {
+                                                Text(text = chatThreads.size.toString(), color = Color.White)
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Chat,
+                                        contentDescription = "المحادثات المباشرة",
+                                        tint = AmberDark
+                                    )
+                                }
+                            }
+
+                            // Dark / Light Mode Switcher
+                            IconButton(
+                                onClick = { viewModel.toggleDarkMode() },
+                                modifier = Modifier.testTag("theme_toggle_button")
+                            ) {
+                                Icon(
+                                    imageVector = if (isDarkActive) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                                    contentDescription = if (isDarkActive) "تفعيل الوضع الفاتح" else "تفعيل الوضع الداكن",
+                                    tint = AmberDark
+                                )
+                            }
+
+                            // Notification Preferences
+                            IconButton(
+                                onClick = { viewModel.isNotificationPreferencesDialogOpen.value = true },
+                                modifier = Modifier.testTag("notification_preferences_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Tune,
+                                    contentDescription = "تخصيص الإشعارات",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
                             // Language switcher chip
                             Box(
                                 modifier = Modifier
@@ -293,7 +376,7 @@ fun MainScreen(
                                 }
                             }
 
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
 
                             // Notifications Bell with unread counter
                             IconButton(
@@ -419,6 +502,7 @@ fun MainScreen(
                 CraftsmanDetailSheet(
                     item = item,
                     reviews = craftsmanReviews,
+                    portfolio = craftsmanPortfolio,
                     language = language,
                     sheetState = detailSheetState,
                     onDismiss = { viewModel.closeCraftsmanDetail() },
@@ -432,7 +516,11 @@ fun MainScreen(
                     onRequestServiceClick = {
                         viewModel.openRequestDialog(item)
                     },
-                    onToggleFavorite = { viewModel.toggleFavorite(it) }
+                    onToggleFavorite = { viewModel.toggleFavorite(it) },
+                    onChatClick = {
+                        viewModel.closeCraftsmanDetail()
+                        viewModel.openChatForCraftsman(item)
+                    }
                 )
             }
 
@@ -495,6 +583,53 @@ fun MainScreen(
                     language = language,
                     onDismiss = { isLocationPickerOpen = false },
                     onSelectLocation = { viewModel.setLocation(it) }
+                )
+            }
+
+            // Notification Preferences Dialog
+            if (isNotificationPreferencesOpen) {
+                NotificationPreferencesDialog(
+                    currentPreferences = notificationPreferences,
+                    onSave = { viewModel.updateNotificationPreferences(it) },
+                    onDismiss = { viewModel.isNotificationPreferencesDialogOpen.value = false }
+                )
+            }
+
+            // Add Portfolio Item Dialog (Craftsman)
+            if (isAddPortfolioOpen && myProfile != null) {
+                AddPortfolioItemDialog(
+                    craftName = myProfile!!.craft,
+                    onSave = { title, desc, uri, type, cost, date ->
+                        viewModel.addPortfolioItem(title, desc, uri, type, cost, date)
+                    },
+                    onDismiss = { viewModel.isAddPortfolioDialogOpen.value = false }
+                )
+            }
+
+            // Direct Firestore Coordination Conversations BottomSheet
+            if (isConversationsListOpen) {
+                ConversationsListDialog(
+                    threads = chatThreads,
+                    language = language,
+                    sheetState = chatSheetState,
+                    onDismiss = { viewModel.isConversationsListOpen.value = false },
+                    onSelectThread = { thread ->
+                        viewModel.openChatThread(thread)
+                    }
+                )
+            }
+
+            // Fullscreen Real-Time Direct Chat Screen (with BackHandler for seamless navigation)
+            activeChatThread?.let { thread ->
+                BackHandler {
+                    viewModel.closeActiveChat()
+                }
+                ChatScreen(
+                    thread = thread,
+                    viewModel = viewModel,
+                    language = language,
+                    onBackClick = { viewModel.closeActiveChat() },
+                    onCallClick = onCall
                 )
             }
         }

@@ -5,11 +5,17 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.HirafiDatabase
 import com.example.data.model.AppNotificationEntity
+import com.example.data.model.ChatMessage
+import com.example.data.model.ChatThread
 import com.example.data.model.CraftsmanEntity
 import com.example.data.model.CraftsmanItem
+import com.example.data.model.NotificationPreferences
+import com.example.data.model.PortfolioItemEntity
 import com.example.data.model.RatingBreakdown
 import com.example.data.model.ReviewEntity
 import com.example.data.model.ServiceRequestEntity
+import com.example.data.remote.FirestoreChatManager
+import com.example.data.remote.FirestoreSyncManager
 import com.example.data.repository.HirafiRepository
 import com.example.service.NotificationHelper
 import com.example.util.AppLanguage
@@ -18,6 +24,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -43,11 +50,33 @@ class HirafiViewModel(application: Application) : AndroidViewModel(application) 
 
     private val repository: HirafiRepository
     val notificationHelper = NotificationHelper(application)
+    private val syncManager: FirestoreSyncManager
+    private val chatManager: FirestoreChatManager
+
+    // Theme (Dark Mode / Light Mode)
+    private val _isDarkMode = MutableStateFlow<Boolean?>(null) // null means follow system
+    val isDarkMode: StateFlow<Boolean?> = _isDarkMode.asStateFlow()
+
+    fun toggleDarkMode() {
+        _isDarkMode.value = !(_isDarkMode.value ?: false)
+    }
+
+    fun setDarkMode(dark: Boolean) {
+        _isDarkMode.value = dark
+    }
 
     init {
         val database = HirafiDatabase.getDatabase(application, viewModelScope)
-        repository = HirafiRepository(database.hirafiDao(), notificationHelper)
+        syncManager = FirestoreSyncManager(application, database.hirafiDao(), viewModelScope)
+        chatManager = FirestoreChatManager(application, viewModelScope)
+        repository = HirafiRepository(database.hirafiDao(), notificationHelper, syncManager)
+        syncManager.startRealtimeSync()
         loadMyCraftsmanProfile()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        syncManager.stopRealtimeSync()
     }
 
     // Language
@@ -56,6 +85,20 @@ class HirafiViewModel(application: Application) : AndroidViewModel(application) 
 
     fun toggleLanguage() {
         _language.value = if (_language.value == AppLanguage.ARABIC) AppLanguage.ENGLISH else AppLanguage.ARABIC
+    }
+
+    // Notification Preferences
+    val notificationPreferences: StateFlow<NotificationPreferences> = repository.notificationPreferences
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NotificationPreferences())
+
+    fun updateNotificationPreferences(prefs: NotificationPreferences) {
+        repository.updateNotificationPreferences(prefs)
+    }
+
+    fun triggerAppointmentReminder(requestId: Long, craftsmanName: String, clientName: String, timeText: String) {
+        viewModelScope.launch {
+            repository.sendAppointmentReminder(requestId, craftsmanName, clientName, timeText)
+        }
     }
 
     // App Mode (Client vs Craftsman)
@@ -235,6 +278,9 @@ class HirafiViewModel(application: Application) : AndroidViewModel(application) 
     private val _craftsmanReviews = MutableStateFlow<List<ReviewEntity>>(emptyList())
     val craftsmanReviews: StateFlow<List<ReviewEntity>> = _craftsmanReviews.asStateFlow()
 
+    private val _craftsmanPortfolio = MutableStateFlow<List<PortfolioItemEntity>>(emptyList())
+    val craftsmanPortfolio: StateFlow<List<PortfolioItemEntity>> = _craftsmanPortfolio.asStateFlow()
+
     fun openCraftsmanDetail(craftsmanItem: CraftsmanItem) {
         _selectedCraftsmanForDetail.value = craftsmanItem
         viewModelScope.launch {
@@ -242,10 +288,16 @@ class HirafiViewModel(application: Application) : AndroidViewModel(application) 
                 _craftsmanReviews.value = it
             }
         }
+        viewModelScope.launch {
+            repository.getPortfolioForCraftsman(craftsmanItem.craftsman.id).collect {
+                _craftsmanPortfolio.value = it
+            }
+        }
     }
 
     fun closeCraftsmanDetail() {
         _selectedCraftsmanForDetail.value = null
+        _craftsmanPortfolio.value = emptyList()
     }
 
     // Dialogs
@@ -370,5 +422,118 @@ class HirafiViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             repository.updateRequestStatus(requestId, newStatus, craftsmanName, clientName)
         }
+    }
+
+    // Craftsman Portfolio Management
+    private val _myPortfolio = MutableStateFlow<List<PortfolioItemEntity>>(emptyList())
+    val myPortfolio: StateFlow<List<PortfolioItemEntity>> = _myPortfolio.asStateFlow()
+
+    fun loadMyPortfolio(craftsmanId: Long) {
+        viewModelScope.launch {
+            repository.getPortfolioForCraftsman(craftsmanId).collect {
+                _myPortfolio.value = it
+            }
+        }
+    }
+
+    fun addPortfolioItem(
+        title: String,
+        description: String,
+        mediaUri: String,
+        mediaType: String,
+        projectCostLyd: String,
+        completedDate: String
+    ) {
+        val myId = _myCraftsmanProfile.value?.id ?: 1L
+        viewModelScope.launch {
+            val item = PortfolioItemEntity(
+                craftsmanId = myId,
+                title = title.trim(),
+                description = description.trim(),
+                mediaUri = mediaUri,
+                mediaType = mediaType,
+                projectCostLyd = projectCostLyd.trim(),
+                completedDate = completedDate.trim()
+            )
+            repository.addPortfolioItem(item)
+            val notif = AppNotificationEntity(
+                title = "📸 تم إضافة عمل جديد لمعرضك",
+                message = "تم نشر عمل: $title في معرض أعمالك ليظهر لجميع العملاء الباحثين عن خدماتك.",
+                type = "PORTFOLIO_ADDED",
+                relatedCraftsmanId = myId
+            )
+            notificationHelper.showNotification(notif.title, notif.message)
+        }
+    }
+
+    fun deletePortfolioItem(id: Long) {
+        viewModelScope.launch {
+            repository.deletePortfolioItem(id)
+        }
+    }
+
+    // UI Dialog States
+    var isNotificationPreferencesDialogOpen = MutableStateFlow(false)
+    var isAddPortfolioDialogOpen = MutableStateFlow(false)
+
+    // Direct Firestore Chat State
+    val chatThreads: StateFlow<List<ChatThread>> = chatManager.threadsState
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _activeChatThread = MutableStateFlow<ChatThread?>(null)
+    val activeChatThread: StateFlow<ChatThread?> = _activeChatThread.asStateFlow()
+
+    val isConversationsListOpen = MutableStateFlow(false)
+
+    fun getChatMessages(threadId: String): Flow<List<ChatMessage>> {
+        return chatManager.getMessagesFlow(threadId)
+    }
+
+    fun openChatForCraftsman(item: CraftsmanItem) {
+        val threadId = "thread_c_${item.craftsman.id}_u_client"
+        val existing = chatThreads.value.firstOrNull { it.id == threadId }
+        val thread = existing ?: ChatThread(
+            id = threadId,
+            craftsmanId = item.craftsman.id,
+            craftsmanName = item.craftsman.name,
+            craftsmanCraft = item.craftsman.craft,
+            craftsmanPhone = item.craftsman.phone,
+            clientId = "client_me",
+            clientName = "الزبون",
+            clientLocation = "${item.craftsman.city} (${item.craftsman.district})"
+        )
+        _activeChatThread.value = thread
+    }
+
+    fun openChatForRequest(request: ServiceRequestEntity) {
+        val threadId = "thread_c_${request.craftsmanId}_u_client"
+        val existing = chatThreads.value.firstOrNull { it.id == threadId }
+        val thread = existing ?: ChatThread(
+            id = threadId,
+            craftsmanId = request.craftsmanId,
+            craftsmanName = request.craftsmanName,
+            craftsmanCraft = request.craft,
+            craftsmanPhone = "",
+            clientId = "client_me",
+            clientName = request.clientName,
+            clientLocation = request.clientLocation
+        )
+        _activeChatThread.value = thread
+    }
+
+    fun openChatThread(thread: ChatThread) {
+        _activeChatThread.value = thread
+    }
+
+    fun closeActiveChat() {
+        chatManager.stopListeningToMessages()
+        _activeChatThread.value = null
+    }
+
+    fun sendChatMessage(thread: ChatThread, messageText: String) {
+        val isCraftsmanMode = currentMode.value == AppMode.CRAFTSMAN
+        val role = if (isCraftsmanMode) ChatMessage.ROLE_CRAFTSMAN else ChatMessage.ROLE_CLIENT
+        val senderName = if (isCraftsmanMode) (_myCraftsmanProfile.value?.name ?: thread.craftsmanName) else thread.clientName
+        chatManager.sendMessage(thread, messageText, role, senderName)
     }
 }

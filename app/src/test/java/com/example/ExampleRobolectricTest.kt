@@ -14,7 +14,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(sdk = [36])
 class ExampleRobolectricTest {
 
     @Test
@@ -53,5 +53,29 @@ class ExampleRobolectricTest {
         val appNameEn = Localization.get("app_name", AppLanguage.ENGLISH)
         assertEquals("دوّرني", appNameAr)
         assertEquals("Dawarni", appNameEn)
+    }
+
+    @Test
+    fun `test notification preferences defaults`() {
+        val prefs = com.example.data.model.NotificationPreferences()
+        assertTrue(prefs.newMatchingRequestsEnabled)
+        assertTrue(prefs.requestAcceptedEnabled)
+        assertTrue(prefs.serviceStatusUpdatesEnabled)
+        assertTrue(prefs.appointmentRemindersEnabled)
+        assertTrue(prefs.soundAndVibrateEnabled)
+    }
+
+    @Test
+    fun `test portfolio item creation`() {
+        val item = com.example.data.model.PortfolioItemEntity(
+            craftsmanId = 1,
+            title = "تركيب شبكة PEX",
+            description = "شبكة مياه معزولة بالكامل",
+            mediaUri = "sample_uri",
+            projectCostLyd = "1,200 د.ل",
+            completedDate = "أكتوبر 2026"
+        )
+        assertEquals("تركيب شبكة PEX", item.title)
+        assertEquals("1,200 د.ل", item.projectCostLyd)
     }
 }

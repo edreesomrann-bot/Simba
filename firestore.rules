@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny-all catch-all rule
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.matches('^[a-zA-Z0-9_\\-]+$') && id.size() >= 1 && id.size() <= 128;
+    }
+
+    function isValidCraftsman(data) {
+      return data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 100 &&
+             data.craft is string && data.craft.size() >= 2 && data.craft.size() <= 100 &&
+             data.phone is string && data.phone.size() >= 5 && data.phone.size() <= 30 &&
+             data.city is string && data.city.size() >= 2 && data.city.size() <= 50 &&
+             (!('district' in data) || (data.district is string && data.district.size() <= 100)) &&
+             (!('experienceYears' in data) || (data.experienceYears is int && data.experienceYears >= 0 && data.experienceYears <= 70)) &&
+             (!('latitude' in data) || data.latitude is number) &&
+             (!('longitude' in data) || data.longitude is number) &&
+             (!('bio' in data) || (data.bio is string && data.bio.size() <= 1000)) &&
+             (!('priceEstimate' in data) || (data.priceEstimate is string && data.priceEstimate.size() <= 100)) &&
+             (!('whatsapp' in data) || (data.whatsapp is string && data.whatsapp.size() <= 30)) &&
+             (!('isAvailable' in data) || data.isAvailable is bool) &&
+             (!('hasEmergencyService' in data) || data.hasEmergencyService is bool) &&
+             (!('isVipFeatured' in data) || data.isVipFeatured is bool) &&
+             (!('specializations' in data) || (data.specializations is string && data.specializations.size() <= 500)) &&
+             (!('avatarSeed' in data) || (data.avatarSeed is string && data.avatarSeed.size() <= 50)) &&
+             (!('createdAt' in data) || (data.createdAt is timestamp && data.createdAt <= request.time)) &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    // Craftsmen catalog collection
+    match /craftsmen/{craftsmanId} {
+      allow get, list: if true;
+
+      allow create: if isSignedIn() &&
+                       isValidId(craftsmanId) &&
+                       incoming().ownerId == request.auth.uid &&
+                       isValidCraftsman(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(craftsmanId) &&
+                       existing().ownerId == request.auth.uid &&
+                       incoming().ownerId == existing().ownerId &&
+                       isValidCraftsman(incoming());
+
+      allow delete: if isSignedIn() &&
+                       isValidId(craftsmanId) &&
+                       existing().ownerId == request.auth.uid;
+    }
+
+    // Direct coordination chat threads between clients and craftsmen
+    match /chat_threads/{threadId} {
+      allow read, write: if true;
+
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+    }
+  }
+}

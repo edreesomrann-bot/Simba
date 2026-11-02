@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DoneAll
@@ -34,6 +35,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -57,6 +59,13 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Collections
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.runtime.LaunchedEffect
+import com.example.data.model.PortfolioItemEntity
 import com.example.data.model.CraftsmanEntity
 import com.example.data.model.ReviewEntity
 import com.example.data.model.ServiceRequestEntity
@@ -80,10 +89,15 @@ fun CraftsmanDashboardScreen(
     val myProfile by viewModel.myCraftsmanProfile.collectAsState()
     val allRequests by viewModel.allRequests.collectAsState()
     val filteredCraftsmen by viewModel.filteredCraftsmen.collectAsState()
+    val myPortfolio by viewModel.myPortfolio.collectAsState()
 
-    var dashboardTab by remember { mutableIntStateOf(0) } // 0: Requests, 1: VIP Plan, 2: Ratings & Reviews
+    var dashboardTab by remember { mutableIntStateOf(0) } // 0: Requests, 1: Portfolio, 2: VIP Plan, 3: Ratings & Reviews
 
     val profile = myProfile ?: return
+    LaunchedEffect(profile.id) {
+        viewModel.loadMyPortfolio(profile.id)
+    }
+
     // Find my computed rating item if present
     val myItem = filteredCraftsmen.firstOrNull { it.craftsman.id == profile.id || it.craftsman.isRegisteredByMe }
     val myStats = myItem?.stats
@@ -215,10 +229,11 @@ fun CraftsmanDashboardScreen(
         }
 
         // Dashboard Tabs
-        TabRow(
+        ScrollableTabRow(
             selectedTabIndex = dashboardTab,
             containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = AmberDark
+            contentColor = AmberDark,
+            edgePadding = 16.dp
         ) {
             Tab(
                 selected = dashboardTab == 0,
@@ -228,11 +243,16 @@ fun CraftsmanDashboardScreen(
             Tab(
                 selected = dashboardTab == 1,
                 onClick = { dashboardTab = 1 },
-                text = { Text(if (language == AppLanguage.ARABIC) "باقة التميز (100 د.ل) 👑" else "VIP Priority (100 LYD) 👑", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                text = { Text(if (language == AppLanguage.ARABIC) "معرض أعمالي 📸" else "My Portfolio 📸", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
             )
             Tab(
                 selected = dashboardTab == 2,
                 onClick = { dashboardTab = 2 },
+                text = { Text(if (language == AppLanguage.ARABIC) "باقة التميز (100 د.ل) 👑" else "VIP Priority (100 LYD) 👑", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+            )
+            Tab(
+                selected = dashboardTab == 3,
+                onClick = { dashboardTab = 3 },
                 text = { Text(Localization.get("my_reviews_title", language), fontSize = 12.sp, fontWeight = FontWeight.Bold) }
             )
         }
@@ -271,7 +291,8 @@ fun CraftsmanDashboardScreen(
                                         craftsmanName = profile.name,
                                         clientName = req.clientName
                                     )
-                                }
+                                },
+                                onChatClick = { viewModel.openChatForRequest(req) }
                             )
                         }
                     }
@@ -279,6 +300,156 @@ fun CraftsmanDashboardScreen(
             }
 
             1 -> {
+                // Portfolio Showcase Management (معرض أعمالي وسابقة المشاريع)
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "معرض الأعمال المنجزة",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "اعرض مشاريعك الناجحة للعملاء لزيادة الثقة والطلبات",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Button(
+                            onClick = { viewModel.isAddPortfolioDialogOpen.value = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.testTag("add_new_portfolio_button")
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("أضف عمل", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    if (myPortfolio.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(30.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Default.Collections,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(56.dp)
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "لم تقم بإضافة أعمال في معرضك بعد",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "اضغط على زر (أضف عمل) أعلاه لرفع صور وفيديوهات مشاريعك السابقة",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(myPortfolio) { pItem ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(72.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(MaterialTheme.colorScheme.primaryContainer),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = if (pItem.mediaType == "VIDEO") Icons.Default.Videocam else Icons.Default.Image,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                modifier = Modifier.size(36.dp)
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.width(14.dp))
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = pItem.title,
+                                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = pItem.description,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                maxLines = 2,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                                if (pItem.projectCostLyd.isNotBlank()) {
+                                                    Text(
+                                                        text = pItem.projectCostLyd,
+                                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                        color = AmberDark
+                                                    )
+                                                }
+                                                if (pItem.completedDate.isNotBlank()) {
+                                                    Text(
+                                                        text = pItem.completedDate,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        IconButton(
+                                            onClick = { viewModel.deletePortfolioItem(pItem.id) }
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "حذف العمل",
+                                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            2 -> {
                 // VIP Priority Subscription Section (100 LYD / month)
                 Column(
                     modifier = Modifier
@@ -380,7 +551,7 @@ fun CraftsmanDashboardScreen(
                 }
             }
 
-            2 -> {
+            3 -> {
                 // Craftsman's Ratings & Reviews Breakdown
                 Column(
                     modifier = Modifier
@@ -467,7 +638,8 @@ fun CraftsmanDashboardScreen(
 fun IncomingRequestCard(
     req: ServiceRequestEntity,
     language: AppLanguage,
-    onUpdateStatus: (String) -> Unit
+    onUpdateStatus: (String) -> Unit,
+    onChatClick: () -> Unit = {}
 ) {
     val statusColor = when (req.status) {
         ServiceRequestEntity.STATUS_PENDING -> AmberDark
@@ -662,6 +834,25 @@ fun IncomingRequestCard(
                         }
                     }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = onChatClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(38.dp),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Icon(Icons.Filled.Chat, contentDescription = null, modifier = Modifier.size(15.dp), tint = AmberDark)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (language == AppLanguage.ARABIC) "محادثة الزبون للتنسيق المباشر 💬" else "Chat with Client to Coordinate 💬",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AmberDark
+                )
             }
         }
     }

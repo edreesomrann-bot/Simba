@@ -5,11 +5,16 @@ import com.example.data.local.HirafiDatabase
 import com.example.data.model.AppNotificationEntity
 import com.example.data.model.CraftsmanEntity
 import com.example.data.model.CraftsmanItem
+import com.example.data.model.NotificationPreferences
+import com.example.data.model.PortfolioItemEntity
 import com.example.data.model.RatingBreakdown
 import com.example.data.model.ReviewEntity
 import com.example.data.model.ServiceRequestEntity
+import com.example.data.remote.FirestoreSyncManager
 import com.example.service.NotificationHelper
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -19,8 +24,15 @@ import kotlin.math.sqrt
 
 class HirafiRepository(
     private val dao: HirafiDao,
-    private val notificationHelper: NotificationHelper
+    private val notificationHelper: NotificationHelper,
+    private val syncManager: FirestoreSyncManager? = null
 ) {
+    private val _notificationPreferences = MutableStateFlow(NotificationPreferences())
+    val notificationPreferences: Flow<NotificationPreferences> = _notificationPreferences.asStateFlow()
+
+    fun updateNotificationPreferences(prefs: NotificationPreferences) {
+        _notificationPreferences.value = prefs
+    }
 
     // Craftsmen list with computed rating breakdowns and distances
     fun getCraftsmenWithStats(userLat: Double, userLon: Double): Flow<List<CraftsmanItem>> {
@@ -73,11 +85,30 @@ class HirafiRepository(
     }
 
     suspend fun saveMyCraftsmanProfile(profile: CraftsmanEntity): Long {
-        return dao.insertCraftsman(profile.copy(isRegisteredByMe = true))
+        val saved = profile.copy(isRegisteredByMe = true)
+        val id = dao.insertCraftsman(saved)
+        // Sync to cloud Firestore in real-time
+        syncManager?.pushCraftsmanToFirestore(saved.copy(id = id))
+        return id
     }
 
     suspend fun updateCraftsmanAvailability(craftsman: CraftsmanEntity, isAvailable: Boolean) {
-        dao.updateCraftsman(craftsman.copy(isAvailable = isAvailable))
+        val updated = craftsman.copy(isAvailable = isAvailable)
+        dao.updateCraftsman(updated)
+        syncManager?.pushCraftsmanToFirestore(updated)
+    }
+
+    // Portfolio items
+    fun getPortfolioForCraftsman(craftsmanId: Long): Flow<List<PortfolioItemEntity>> {
+        return dao.getPortfolioForCraftsman(craftsmanId)
+    }
+
+    suspend fun addPortfolioItem(item: PortfolioItemEntity): Long {
+        return dao.insertPortfolioItem(item)
+    }
+
+    suspend fun deletePortfolioItem(id: Long) {
+        dao.deletePortfolioItem(id)
     }
 
     // Reviews submission
@@ -148,17 +179,20 @@ class HirafiRepository(
         )
         val requestId = dao.insertRequest(request)
 
-        // Real-time Notification dispatched to the craftsman
-        val urgentTag = if (isEmergency) " [عاجل/طوارئ 🚨]" else ""
-        val notif = AppNotificationEntity(
-            title = "🔔 طلب عمل جديد$urgentTag",
-            message = "طلب جديد من ${request.clientName} للحرفي $craftsmanName ($craft): ${request.description}",
-            type = "CLIENT_REQUEST",
-            relatedRequestId = requestId,
-            relatedCraftsmanId = craftsmanId
-        )
-        dao.insertNotification(notif)
-        notificationHelper.showNotification(notif.title, notif.message)
+        val prefs = _notificationPreferences.value
+        // Real-time Notification dispatched to the craftsman if preference allows
+        if (prefs.newMatchingRequestsEnabled) {
+            val urgentTag = if (isEmergency) " [عاجل/طوارئ 🚨]" else ""
+            val notif = AppNotificationEntity(
+                title = "🔔 طلب عمل جديد$urgentTag",
+                message = "طلب جديد من ${request.clientName} للحرفي $craftsmanName ($craft): ${request.description}",
+                type = "CLIENT_REQUEST",
+                relatedRequestId = requestId,
+                relatedCraftsmanId = craftsmanId
+            )
+            dao.insertNotification(notif)
+            notificationHelper.showNotification(notif.title, notif.message)
+        }
 
         return requestId
     }
@@ -171,6 +205,12 @@ class HirafiRepository(
     ) {
         val now = System.currentTimeMillis()
         dao.updateRequestStatus(requestId, newStatus, now)
+
+        val prefs = _notificationPreferences.value
+        val shouldNotify = when (newStatus) {
+            ServiceRequestEntity.STATUS_ACCEPTED -> prefs.requestAcceptedEnabled
+            else -> prefs.serviceStatusUpdatesEnabled
+        }
 
         val statusText = when (newStatus) {
             ServiceRequestEntity.STATUS_ACCEPTED -> "تم قبول طلبك بواسطة $craftsmanName"
@@ -185,6 +225,22 @@ class HirafiRepository(
             title = "📢 تحديث في حالة طلب الخدمة",
             message = "عزيزي $clientName: $statusText",
             type = "STATUS_UPDATE",
+            relatedRequestId = requestId
+        )
+        dao.insertNotification(notif)
+        if (shouldNotify) {
+            notificationHelper.showNotification(notif.title, notif.message)
+        }
+    }
+
+    suspend fun sendAppointmentReminder(requestId: Long, craftsmanName: String, clientName: String, appointmentTime: String) {
+        val prefs = _notificationPreferences.value
+        if (!prefs.appointmentRemindersEnabled) return
+
+        val notif = AppNotificationEntity(
+            title = "⏰ تذكير بموعد الخدمة",
+            message = "تذكير: لديك موعد مجدول مع الحرفي $craftsmanName في $appointmentTime. يرجى التواجد في الموقع.",
+            type = "REMINDER",
             relatedRequestId = requestId
         )
         dao.insertNotification(notif)

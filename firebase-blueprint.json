@@ -1,0 +1,111 @@
+{
+  "entities": {
+    "Craftsman": {
+      "title": "Craftsman",
+      "description": "Craftsperson profile in Libya",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the craftsperson owner"
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name of the craftsperson"
+        },
+        "craft": {
+          "type": "string",
+          "description": "Trade or craft specialization e.g. سباكة, كهرباء"
+        },
+        "experienceYears": {
+          "type": "integer",
+          "description": "Years of hands-on experience"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Libyan phone number e.g. +218912345678"
+        },
+        "whatsapp": {
+          "type": "string",
+          "description": "WhatsApp contact number"
+        },
+        "city": {
+          "type": "string",
+          "description": "City in Libya e.g. طرابلس, بنغازي, مصراتة"
+        },
+        "district": {
+          "type": "string",
+          "description": "Neighborhood or district"
+        },
+        "latitude": {
+          "type": "number",
+          "description": "Geographical latitude"
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Geographical longitude"
+        },
+        "bio": {
+          "type": "string",
+          "description": "Brief biography and description of services"
+        },
+        "priceEstimate": {
+          "type": "string",
+          "description": "Standard price estimate in LYD"
+        },
+        "isAvailable": {
+          "type": "boolean",
+          "description": "Current availability for new work orders"
+        },
+        "hasEmergencyService": {
+          "type": "boolean",
+          "description": "Whether 24/7 emergency service is provided"
+        },
+        "isVipFeatured": {
+          "type": "boolean",
+          "description": "VIP priority badge subscription status"
+        },
+        "specializations": {
+          "type": "string",
+          "description": "Comma-separated sub-specialties"
+        },
+        "avatarSeed": {
+          "type": "string",
+          "description": "Deterministic avatar seed identifier"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp. Clients must submit FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp. Clients must submit FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "ownerId",
+        "name",
+        "craft",
+        "phone",
+        "city",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/craftsmen/{craftsmanId}": {
+      "schema": {
+        "$ref": "#/entities/Craftsman"
+      },
+      "description": "Catalog of verified craftspeople in Libya with public reads and owner-authenticated writes"
+    },
+    "/chat_threads/{threadId}": {
+      "description": "Direct coordination chat threads between clients and craftsmen before confirming work"
+    },
+    "/chat_threads/{threadId}/messages/{messageId}": {
+      "description": "Real-time chat messages between client and craftsman"
+    }
+  }
+}

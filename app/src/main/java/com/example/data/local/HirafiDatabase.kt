@@ -7,6 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.model.AppNotificationEntity
 import com.example.data.model.CraftsmanEntity
+import com.example.data.model.PortfolioItemEntity
 import com.example.data.model.ReviewEntity
 import com.example.data.model.ServiceRequestEntity
 import kotlinx.coroutines.CoroutineScope
@@ -18,9 +19,10 @@ import kotlinx.coroutines.launch
         CraftsmanEntity::class,
         ReviewEntity::class,
         ServiceRequestEntity::class,
-        AppNotificationEntity::class
+        AppNotificationEntity::class,
+        PortfolioItemEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class HirafiDatabase : RoomDatabase() {
@@ -267,6 +269,64 @@ abstract class HirafiDatabase : RoomDatabase() {
             )
 
             dao.insertAllReviews(sampleReviews)
+
+            val samplePortfolioItems = listOf(
+                PortfolioItemEntity(
+                    craftsmanId = 1,
+                    title = "تأسيس شبكة مياه PEX لفيلا طابقين",
+                    description = "تنفيذ شبكة مياه معزولة بالكامل مع مجمع توزيع ومضخة ضغط إيطالية واختبار ضغط الأنابيب على 10 بار.",
+                    mediaUri = "portfolio_plumbing_1",
+                    mediaType = "IMAGE",
+                    projectCostLyd = "1,850 د.ل",
+                    completedDate = "أكتوبر 2026"
+                ),
+                PortfolioItemEntity(
+                    craftsmanId = 1,
+                    title = "صيانة تسريب مخفي وتركيب خلاطات دش مدفونة",
+                    description = "كشف التسريب بأجهزة الموجات الصوتية دون تكسير الجدران وتغيير الوصلات مع تركيب دش مطري إيطالي.",
+                    mediaUri = "portfolio_plumbing_2",
+                    mediaType = "IMAGE",
+                    projectCostLyd = "420 د.ل",
+                    completedDate = "سبتمبر 2026"
+                ),
+                PortfolioItemEntity(
+                    craftsmanId = 2,
+                    title = "لوحة قواطع رئيسية ثلاثية الأطوار مع تأريض كامل",
+                    description = "توزيع أحمال الفيلا بدقة، تركيب قواطع شنايدر وتأريض نحاسي لحماية الأجهزة الإلكترونية والمكيفات.",
+                    mediaUri = "portfolio_electric_1",
+                    mediaType = "IMAGE",
+                    projectCostLyd = "1,200 د.ل",
+                    completedDate = "أكتوبر 2026"
+                ),
+                PortfolioItemEntity(
+                    craftsmanId = 2,
+                    title = "إنارة مخفية LED بروفايل مع تحكم ذكي",
+                    description = "تصميم وتنفيذ إضاءة مخفية لصالون ضيوف 40 متر مربع مع ديمر تحكم لاسلكي.",
+                    mediaUri = "portfolio_electric_2",
+                    mediaType = "IMAGE",
+                    projectCostLyd = "650 د.ل",
+                    completedDate = "أغسطس 2026"
+                ),
+                PortfolioItemEntity(
+                    craftsmanId = 3,
+                    title = "تركيب 8 وحدات تكييف سبليت إنفرتر لمبنى إداري",
+                    description = "تمديد مواسير نحاس أصلية معزولة مع شحن غاز R410A وبرمجة ثيرموستات ذكية في بنغازي.",
+                    mediaUri = "portfolio_ac_1",
+                    mediaType = "IMAGE",
+                    projectCostLyd = "2,400 د.ل",
+                    completedDate = "أيلول 2026"
+                ),
+                PortfolioItemEntity(
+                    craftsmanId = 4,
+                    title = "غرفة نوم ماستر خشب سنديان طبيعي وأبواب سويدي",
+                    description = "تفصيل سرير ودولاب خزانة 6 أبواب هيدروليك مع دهان مقاوم للرطوبة.",
+                    mediaUri = "portfolio_carpentry_1",
+                    mediaType = "IMAGE",
+                    projectCostLyd = "4,500 د.ل",
+                    completedDate = "سبتمبر 2026"
+                )
+            )
+            dao.insertAllPortfolioItems(samplePortfolioItems)
 
             val sampleNotification = AppNotificationEntity(
                 title = "مرحباً بك في تطبيق حرفي - ليبيا 🇱🇾",
